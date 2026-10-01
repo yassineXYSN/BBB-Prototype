@@ -1,0 +1,97 @@
+# InterviewOps — prototype stack.
+#
+# Default setup (local development): a mock BigBlueButton server (mockbbb)
+# runs beside the API so the whole lifecycle — room, recording, transcript,
+# purge — works on localhost with zero external services.
+#
+#   cp backend/.env.example backend/.env
+#   docker compose up --build        # api :8001, web :5174, mock BBB :9090
+#
+# Production (real BBB on the same VPS, installed with BBB's official script):
+#   * remove the mockbbb service (or run with a real BBB_URL/BBB_SHARED_SECRET
+#     in backend/.env)
+#   * set API_BASE_URL to a hostname the BBB host can reach
+#
+# Ports are overridable via the project-root .env (API_PORT, WEB_PORT, BBB_PORT).
+
+services:
+  api:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: sqlite:////data/app.db
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:${API_PORT:-8000}}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:${WEB_PORT:-5173}}
+      # Server-to-server BBB API from inside the network defaults to the mock;
+      # set BBB_URL (project-root .env or shell) when using a real server.
+      BBB_URL: ${BBB_URL:-http://mockbbb:9090/bigbluebutton/}
+    volumes:
+      - app-data:/data
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      - mockbbb
+    restart: unless-stopped
+
+  mockbbb:
+    build: ./mockbbb
+    env_file: ./backend/.env
+    ports:
+      - "${BBB_PORT:-9090}:9090"
+    restart: unless-stopped
+
+  # coturn for ICE relay testing (same-machine / same-LAN). For real
+  # cross-network calls behind CGNAT, point TURN_URL at a public TURN
+  # instead — see README "Cross-network video (TURN)".
+  turn:
+    image: coturn/coturn:latest
+    command:
+      - --no-cli
+      - --fingerprint
+      - --lt-cred-mech
+      - "--user=dev:devdev"
+      - "--realm=interview.local"
+      - "--listening-port=3478"
+      - "--min-port=49160"
+      - "--max-port=49200"
+      - --verbose
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "49160-49200:49160-49200/udp"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Optional HTTPS front for deployments with a real domain (auto Let's
+  # Encrypt certificate — no certbot). Activate with:
+  #   HTTPS_SITE=interviews.example.com, WEB_PORT=8080 in the root .env
+  #   docker compose --profile https up -d
+  # Caddy owns 80/443 and proxies to the web service; see DEPLOY.md.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    environment:
+      SITE: ${HTTPS_SITE:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  caddy-data:

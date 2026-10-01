@@ -1,0 +1,7 @@
+# Reverse proxy used by the optional `caddy` compose service (profile "https").
+# {$SITE} is filled from the HTTPS_SITE environment variable (project-root .env).
+# Caddy provisions a Let's Encrypt certificate automatically for that hostname.
+{$SITE} {
+	encode gzip
+	reverse_proxy web:80
+}

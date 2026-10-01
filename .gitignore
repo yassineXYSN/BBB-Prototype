@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Node
+node_modules/
+dist/
+frontend/.env.local
+
+# Env & logs
+.env
+*.log
+
+# Archives
+*.tar.gz
+*.zip
+
+# Editors / OS
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
